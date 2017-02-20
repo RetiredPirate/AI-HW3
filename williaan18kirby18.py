@@ -112,8 +112,7 @@ class AIPlayer(Player):
                     self.ourFood.append(food)
             self.weHaveNotDoneThisBefore = False
 
-        retMove = self.moveSearch(currentState, 0, None)
-        return retMove[-2]['move']
+        return (self.moveSearch(currentState, 0, self.initNode(None, -1, currentState), True)['move'])
 
     ##
     # getAttack
@@ -199,10 +198,12 @@ class AIPlayer(Player):
     #   move - the move to create the next node
     #   currentState - a clone of the current state
     ##
-    def initNode(self, move, currentState):
-        node = {'move': move, 'nextState': getNextState(currentState, move), 
-                'utility': self.getUtility(getNextState(currentState, move))}
-
+    def initNode(self, move, utility, currentState):
+        if move is not None:
+            node = {'move': move, 'nextState': getNextStateAdversarial(currentState, move), 'utility': utility}
+        else:
+            node = {'move': None, 'nextState': None, 'utility': utility}
+            
         return node
 
 
@@ -237,27 +238,50 @@ class AIPlayer(Player):
     #   list of the moves to reach the most desireable state, list[-2] is the 
     #   first move that can be taken
     ##
-    def moveSearch(self, state, depth, currNode):
+    def moveSearch(self, state, depth, currNode, isMaxTurn):
         if depth >= self.SEARCH_DEPTH:
-            return [currNode]
+            currNode['utility'] = self.getUtility(state)
+            return currNode
 
+        
         # get list of neighboring nodes
         nodes = []
         for move in listAllLegalMoves(state):
-            nodes.append(self.initNode(move, state))
+            node = self.initNode(move, -1, state)
+            if move.moveType == END:
+                nodes.append(self.moveSearch(node['nextState'], depth+1, node, not isMaxTurn))
+            else:
+                nodes.append(self.moveSearch(node['nextState'], depth+1, node, isMaxTurn))
 
-        # recursively call this method, find path with best average utility
-        pathUtil = -1
-        for node in nodes:
-        	pathToNode = self.moveSearch(node['nextState'], depth+1, node)
-        	currUtil = self.evalNode(pathToNode)
-        	if currUtil > pathUtil:
-        		pathUtil = currUtil
-        		favoriteMove = pathToNode
+        if isMaxTurn:
+            maxUtil = 0
+            for node in nodes:
+                if node['utility'] > maxUtil:
+                    maxUtil = node['utility']
+            currNode['utility'] = maxUtil
 
-        # return the best path of moves
-        favoriteMove.append(currNode)
-        return favoriteMove
+        else:
+            minUtil = 1
+            for node in nodes:
+                if node['utility'] < minUtil:
+                    minUtil = node['utility']
+            currNode['utility'] = minUtil
+
+        return currNode
+
+
+        #     # recursively call this method, find path with best average utility
+        #     pathUtil = -1
+        #     for node in nodes:
+        #     	pathToNode = self.moveSearch(node['nextState'], depth+1, node)
+        #     	currUtil = self.evalNode(pathToNode)
+        #     	if currUtil > pathUtil:
+        #     		pathUtil = currUtil
+        #     		favoriteMove = pathToNode
+
+        # # return the best path of moves
+        # favoriteMove.append(currNode)
+        # return favoriteMove
 
 
     # Register a win
@@ -281,58 +305,58 @@ class AIPlayer(Player):
 
 
 
-#### UNIT TESTS ####
+# #### UNIT TESTS ####
 
-# Create a GameState and populate it with inventories and a board
-board = [[Location((col, row)) for row in xrange(0,BOARD_LENGTH)] for col in xrange(0,BOARD_LENGTH)]
-p1Inventory = Inventory(PLAYER_ONE, [Ant((3,4), WORKER, PLAYER_ONE), Ant((4,2), QUEEN, PLAYER_ONE)]
-                , [Building((0,0), ANTHILL, PLAYER_ONE), Building((2,1), TUNNEL, PLAYER_ONE)], 0)
-p2Inventory = Inventory(PLAYER_TWO, [Ant((2,6), WORKER, PLAYER_TWO), Ant((2,8), QUEEN, PLAYER_TWO)]
-                , [Building((5,7), ANTHILL, PLAYER_TWO), Building((4,1), TUNNEL, PLAYER_TWO)], 0)
-neutralInventory = Inventory(NEUTRAL, [], [], 0)
-state = GameState(board, [p1Inventory, p2Inventory, neutralInventory], PLAY_PHASE, PLAYER_ONE)
+# # Create a GameState and populate it with inventories and a board
+# board = [[Location((col, row)) for row in xrange(0,BOARD_LENGTH)] for col in xrange(0,BOARD_LENGTH)]
+# p1Inventory = Inventory(PLAYER_ONE, [Ant((3,4), WORKER, PLAYER_ONE), Ant((4,2), QUEEN, PLAYER_ONE)]
+#                 , [Building((0,0), ANTHILL, PLAYER_ONE), Building((2,1), TUNNEL, PLAYER_ONE)], 0)
+# p2Inventory = Inventory(PLAYER_TWO, [Ant((2,6), WORKER, PLAYER_TWO), Ant((2,8), QUEEN, PLAYER_TWO)]
+#                 , [Building((5,7), ANTHILL, PLAYER_TWO), Building((4,1), TUNNEL, PLAYER_TWO)], 0)
+# neutralInventory = Inventory(NEUTRAL, [], [], 0)
+# state = GameState(board, [p1Inventory, p2Inventory, neutralInventory], PLAY_PHASE, PLAYER_ONE)
 
-# Create a player object to call the methods
-player = AIPlayer(PLAYER_ONE)
-
-
-# Test that getUtility() returns a float in the bounds
-x = player.getUtility(state)
-
-if not (x <=1 and x >= 0):
-    print "The method getUtility() has returned an out of bounds value."
+# # Create a player object to call the methods
+# player = AIPlayer(PLAYER_ONE)
 
 
-# Test that initNode() returns a node structure
-nodes = []
-for move in listAllLegalMoves(state):
-    node = player.initNode(move, state)
-    nodes.append(node)
-    if not isinstance(node['move'], Move):
-        print "Move not found in Node structure"
-    if not isinstance(node['nextState'], GameState):
-        print "State not found in Node structure"
-    if not isinstance(node['utility'], float):
-        print "Utility not found in Node structure"
+# # Test that getUtility() returns a float in the bounds
+# x = player.getUtility(state)
+
+# if not (x <=1 and x >= 0):
+#     print "The method getUtility() has returned an out of bounds value."
 
 
-# Test that evalNode() returns a float in bounds
-y = player.evalNode(nodes)
+# # Test that initNode() returns a node structure
+# nodes = []
+# for move in listAllLegalMoves(state):
+#     node = player.initNode(move, state)
+#     nodes.append(node)
+#     if not isinstance(node['move'], Move):
+#         print "Move not found in Node structure"
+#     if not isinstance(node['nextState'], GameState):
+#         print "State not found in Node structure"
+#     if not isinstance(node['utility'], float):
+#         print "Utility not found in Node structure"
 
-if not (y <=1 and y >= 0):
-    print "The method evalNode() has returned an out of bounds value."
+
+# # Test that evalNode() returns a float in bounds
+# y = player.evalNode(nodes)
+
+# if not (y <=1 and y >= 0):
+#     print "The method evalNode() has returned an out of bounds value."
 
 
-# Test that moveSearch() returns a list of Nodes, last one is None
-nodes = player.moveSearch(state, 0, None)
+# # Test that moveSearch() returns a list of Nodes, last one is None
+# nodes = player.moveSearch(state, 0, None)
 
-for node in nodes:
-    if node is nodes[-1]: 
-        continue
+# for node in nodes:
+#     if node is nodes[-1]: 
+#         continue
 
-    if not isinstance(node['move'], Move):
-        print "Move not found in Node structure"
-    if not isinstance(node['nextState'], GameState):
-        print "State not found in Node structure"
-    if not isinstance(node['utility'], float):
-        print "Utility not found in Node structure" 
+#     if not isinstance(node['move'], Move):
+#         print "Move not found in Node structure"
+#     if not isinstance(node['nextState'], GameState):
+#         print "State not found in Node structure"
+#     if not isinstance(node['utility'], float):
+#         print "Utility not found in Node structure" 
