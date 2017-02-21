@@ -28,7 +28,7 @@ class AIPlayer(Player):
     #   inputPlayerId - The id to give the new player (int)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer, self).__init__(inputPlayerId, "AI_NOT_FOUND")
+        super(AIPlayer, self).__init__(inputPlayerId, "Give me an A+")
 
         self.enemyFood = []
         self.ourFood = []
@@ -36,7 +36,7 @@ class AIPlayer(Player):
         self.weHaveNotDoneThisBefore = True
 
 
-        self.SEARCH_DEPTH = 2
+        self.SEARCH_DEPTH = 3
     
     ##
     # getPlacement
@@ -148,47 +148,67 @@ class AIPlayer(Player):
             else:
                 enemyInv = inv
 
-        utility = 0
+
+
+        utilities = []
+
         # The code below creates a utility value based on the amount of food our agent has in their inventory
-        # Range of 0 to 60
-        utility += float(ourInv.foodCount) * float(5)
+        # Weight 0.4
+        utilities.append((float(ourInv.foodCount)/12.0, 0.4))
 
         # If our agent has less than three ants this is a bad utility, if our agent has 3 to 5 ants this is a good
-        # utility, and if our agent over 5 ants this is a medium utility        numAnts = len(ourInv.ants)
-        # Range 0 to 40
+        # utility, and if our agent over 5 ants this is a medium utility
+        # Weight 0.2
         numAnts = len(ourInv.ants)
+        if numAnts == 1:
+            antUtil = 0.0
         if numAnts == 2:
-            utility += 5
+            antUtil = .3
         if numAnts == 3:
-            utility += 20
-        if numAnts == 4:
-            utility += 40
-        if numAnts > 4:
-            utility += 10
-        
+            antUtil= .8
+        if numAnts == 4 or numAnts == 5:
+            antUtil = 1.0
+        if numAnts > 5:
+            antUtil = 0.5
+        utilities.append((antUtil, 0.2))
 
         # The code below creates a utility value based on the number of ants the enemy has
         # If the enemy has more than 4 ants this is a bad utility and if the enemy has less it is a good utility
-        # Range 0 to 40
+        # Weight 0.2
         enemyNumAnts = len(enemyInv.ants)
-        if enemyNumAnts == 1:
-            utility += 40
+        if enemyNumAnts == 1 or enemyNumAnts == 0:
+            enemyAntUtil = 1.0
         if enemyNumAnts == 2:
-            utility += 30
+            enemyAntUtil = .9
         if enemyNumAnts == 3:
-            utility += 20
+            enemyAntUtil= .5
         if enemyNumAnts == 4:
-            utility += 10
+            enemyAntUtil = 0.2
+        if enemyNumAnts > 4:
+            enemyAntUtil = 0.0
+        utilities.append((enemyAntUtil, 0.2))
 
-
+        # Add utility for each food being carried by an ant worker
+        # Weight 0.1
+        carryUtil = 0.0
         for worker in getAntList(currentState, self.playerId, (WORKER,)):
             if worker.carrying:
-                utility += 4
+                carryUtil += 0.2
+        carryUtil = max(carryUtil, 1.0)
+        utilities.append((carryUtil, 0.1))
 
-        # Utility Range from 0 to 140
-        utility = float(utility)/166.0 + 0.03
+        # Add utility for Her Majesty's health
+        # Weight 0.3
+        myBeautifulQueen = getAntList(currentState, self.playerId, (QUEEN,))[0]
+        queenUtil = float(myBeautifulQueen.health)/8.0
+        utilities.append((queenUtil, 0.3))
 
-        return utility
+        # Add utilities together with respective weights
+        finalUtil = 0.0
+        for util in utilities:
+            finalUtil += util[0]*util[1]
+
+        return finalUtil
 
     # #
     # initNode
@@ -254,20 +274,25 @@ class AIPlayer(Player):
                 nodes.append(self.moveSearch(node['nextState'], depth+1, node, isMaxTurn))
 
         if isMaxTurn:
-            maxUtil = 0
+            maxUtil = -1
             for node in nodes:
                 if node['utility'] > maxUtil:
                     maxUtil = node['utility']
+                    favNode = node
             currNode['utility'] = maxUtil
 
         else:
-            minUtil = 1
+            minUtil = 2
             for node in nodes:
                 if node['utility'] < minUtil:
                     minUtil = node['utility']
+                    favNode = node
             currNode['utility'] = minUtil
 
-        return currNode
+        if depth == 0:
+            return favNode
+        else:
+            return currNode
 
 
         #     # recursively call this method, find path with best average utility
