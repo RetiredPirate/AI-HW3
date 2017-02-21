@@ -35,9 +35,6 @@ class AIPlayer(Player):
 
         self.weHaveNotDoneThisBefore = True
 
-
-        self.SEARCH_DEPTH = 3
-    
     ##
     # getPlacement
     #
@@ -112,7 +109,7 @@ class AIPlayer(Player):
                     self.ourFood.append(food)
             self.weHaveNotDoneThisBefore = False
 
-        return (self.moveSearch(currentState, 0, self.initNode(None, -1, currentState), True)['move'])
+        return (self.moveSearch(currentState, 3, 0, self.initNode(None, -1, currentState, True, None))['move'])
 
     ##
     # getAttack
@@ -198,10 +195,10 @@ class AIPlayer(Player):
         utilities.append((carryUtil, 0.1))
 
         # Add utility for Her Majesty's health
-        # Weight 0.3
+        # Weight 0.1
         myBeautifulQueen = getAntList(currentState, self.playerId, (QUEEN,))[0]
         queenUtil = float(myBeautifulQueen.health)/8.0
-        utilities.append((queenUtil, 0.3))
+        utilities.append((queenUtil, 0.1))
 
         # Add utilities together with respective weights
         finalUtil = 0.0
@@ -218,17 +215,24 @@ class AIPlayer(Player):
     #   move - the move to create the next node
     #   currentState - a clone of the current state
     ##
-    def initNode(self, move, utility, currentState):
+    def initNode(self, move, utility, currentState, isMaxNode, parentNode):
         if move is not None:
-            node = {'move': move, 'nextState': getNextStateAdversarial(currentState, move), 'utility': utility}
+            nextState = getNextStateAdversarial(currentState, move)
         else:
-            node = {'move': None, 'nextState': None, 'utility': utility}
+            nextState = None
 
+        if isMaxNode:
+            bound = 0
+        else:
+            bound = 1
+
+        node = {'move': move, 'nextState': nextState, 'utility': utility, 'isMax': isMaxNode,
+                     'bound': bound, 'parentNode': parentNode}
         return node
 
 
     # #
-    # evalNode
+    # evalNode                                          DEPRECIATED
     # Description: Takes a dictionary of node and returns the average utility
     #
     # Parameters:
@@ -258,8 +262,8 @@ class AIPlayer(Player):
     #   list of the moves to reach the most desireable state, list[-2] is the 
     #   first move that can be taken
     ##
-    def moveSearch(self, state, finalDepth, currentDepth, currNode, isMaxTurn):
-        if depth >= finalDepth:
+    def moveSearch(self, state, finalDepth, currDepth, currNode):
+        if currDepth >= finalDepth or currDepth >= 5:
             currNode['utility'] = self.getUtility(state)
             return currNode
 
@@ -267,20 +271,34 @@ class AIPlayer(Player):
         # get list of neighboring nodes
         nodes = []
         for move in listAllLegalMoves(state):
-            node = self.initNode(move, -1, state)
             if move.moveType == END:
-                nodes.append(self.moveSearch(node['nextState'], depth+1, node, not isMaxTurn))
+                nodes.append(self.initNode(move, 0.5, state, not currNode['isMax'], currNode))
             else:
-                nodes.append(self.moveSearch(node['nextState'], depth+1, node, isMaxTurn))
+                nodes.append(self.initNode(move, 0.5, state, currNode['isMax'], currNode))
 
-        if isMaxTurn:
+        for node in nodes:
+            node = self.moveSearch(node['nextState'], finalDepth, currDepth+1, node)
+            if currDepth != 0:
+                if currNode['isMax'] and node['utility'] > currNode['bound']:
+                    currNode['bound'] = node['utility']
+                    if currNode['isMax'] is not currNode['parentNode']['isMax']:
+                        if currNode['bound'] <= currNode['parentNode']['bound']:
+                            currNode['bound'] = currNode['utility']
+                            return currNode
+                elif not currNode['isMax'] and node['utility'] < currNode['bound']:
+                    currNode['bound'] = node['utility']
+                    if currNode['isMax'] is not currNode['parentNode']['isMax']:
+                        if currNode['bound'] >= currNode['parentNode']['bound']:
+                            currNode['bound'] = currNode['utility']
+                            return currNode
+
+        if currNode['isMax']:
             maxUtil = -1
             for node in nodes:
                 if node['utility'] > maxUtil:
                     maxUtil = node['utility']
                     favNode = node
             currNode['utility'] = maxUtil
-
         else:
             minUtil = 2
             for node in nodes:
@@ -289,7 +307,7 @@ class AIPlayer(Player):
                     favNode = node
             currNode['utility'] = minUtil
 
-        if depth == 0:
+        if currDepth == 0:
             return favNode
         else:
             return currNode
