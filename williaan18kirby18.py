@@ -203,7 +203,7 @@ class AIPlayer(Player):
             node = {'move': move, 'nextState': getNextStateAdversarial(currentState, move), 'utility': utility}
         else:
             node = {'move': None, 'nextState': None, 'utility': utility}
-            
+
         return node
 
 
@@ -238,8 +238,8 @@ class AIPlayer(Player):
     #   list of the moves to reach the most desireable state, list[-2] is the 
     #   first move that can be taken
     ##
-    def moveSearch(self, state, depth, currNode, isMaxTurn):
-        if depth >= self.SEARCH_DEPTH:
+    def moveSearch(self, state, finalDepth, currentDepth, currNode, isMaxTurn):
+        if depth >= finalDepth:
             currNode['utility'] = self.getUtility(state)
             return currNode
 
