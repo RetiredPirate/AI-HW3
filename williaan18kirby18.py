@@ -109,7 +109,7 @@ class AIPlayer(Player):
                     self.ourFood.append(food)
             self.weHaveNotDoneThisBefore = False
 
-        return (self.moveSearch(currentState, 3, 0, self.initNode(None, -1, currentState, True, None))['move'])
+        return (self.moveSearch(3, 0, self.initNode(None, -1, currentState, True, None))['move'])
 
     ##
     # getAttack
@@ -151,7 +151,7 @@ class AIPlayer(Player):
 
         # The code below creates a utility value based on the amount of food our agent has in their inventory
         # Weight 0.4
-        utilities.append((float(ourInv.foodCount)/12.0, 0.4))
+        utilities.append((float(ourInv.foodCount)/12.0, 0.7))
 
         # If our agent has less than three ants this is a bad utility, if our agent has 3 to 5 ants this is a good
         # utility, and if our agent over 5 ants this is a medium utility
@@ -167,7 +167,7 @@ class AIPlayer(Player):
             antUtil = 1.0
         if numAnts > 5:
             antUtil = 0.5
-        utilities.append((antUtil, 0.2))
+        utilities.append((antUtil, 0.0))
 
         # The code below creates a utility value based on the number of ants the enemy has
         # If the enemy has more than 4 ants this is a bad utility and if the enemy has less it is a good utility
@@ -183,7 +183,7 @@ class AIPlayer(Player):
             enemyAntUtil = 0.2
         if enemyNumAnts > 4:
             enemyAntUtil = 0.0
-        utilities.append((enemyAntUtil, 0.2))
+        utilities.append((enemyAntUtil, 0.0))
 
         # Add utility for each food being carried by an ant worker
         # Weight 0.1
@@ -192,13 +192,13 @@ class AIPlayer(Player):
             if worker.carrying:
                 carryUtil += 0.2
         carryUtil = max(carryUtil, 1.0)
-        utilities.append((carryUtil, 0.1))
+        utilities.append((carryUtil, 0.3))
 
         # Add utility for Her Majesty's health
         # Weight 0.1
         myBeautifulQueen = getAntList(currentState, self.playerId, (QUEEN,))[0]
         queenUtil = float(myBeautifulQueen.health)/8.0
-        utilities.append((queenUtil, 0.1))
+        utilities.append((queenUtil, 0.0))
 
         # Add utilities together with respective weights
         finalUtil = 0.0
@@ -226,7 +226,7 @@ class AIPlayer(Player):
         else:
             bound = 1
 
-        node = {'move': move, 'nextState': nextState, 'utility': utility, 'isMax': isMaxNode,
+        node = {'move': move, 'currState': currentState,'nextState': nextState, 'utility': utility, 'isMax': isMaxNode,
                      'bound': bound, 'parentNode': parentNode}
         return node
 
@@ -262,22 +262,22 @@ class AIPlayer(Player):
     #   list of the moves to reach the most desireable state, list[-2] is the 
     #   first move that can be taken
     ##
-    def moveSearch(self, state, finalDepth, currDepth, currNode):
+    def moveSearch(self, finalDepth, currDepth, currNode):
         if currDepth >= finalDepth or currDepth >= 5:
-            currNode['utility'] = self.getUtility(state)
+            currNode['utility'] = self.getUtility(currNode['currState'])
             return currNode
 
         
         # get list of neighboring nodes
         nodes = []
-        for move in listAllLegalMoves(state):
+        for move in listAllLegalMoves(currNode['currState']):
             if move.moveType == END:
-                nodes.append(self.initNode(move, 0.5, state, not currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, 0.5, currNode['currState'], not currNode['isMax'], currNode))
             else:
-                nodes.append(self.initNode(move, 0.5, state, currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, 0.5, currNode['currState'], currNode['isMax'], currNode))
 
         for node in nodes:
-            node = self.moveSearch(node['nextState'], finalDepth, currDepth+1, node)
+            node = self.moveSearch(finalDepth, currDepth+1, node)
             if currDepth != 0:
                 if currNode['isMax'] and node['utility'] > currNode['bound']:
                     currNode['bound'] = node['utility']
