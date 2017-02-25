@@ -9,6 +9,7 @@ from Ant import UNIT_STATS
 from Move import Move
 from GameState import *
 from AIPlayerUtils import *
+from operator import itemgetter, attrgetter
 
 
 ##
@@ -140,7 +141,7 @@ class AIPlayer(Player):
             return 0.0
         # Getting our inventory and our enemy's inventory
         for inv in currentState.inventories:
-            if inv.player == currentState.whoseTurn:
+            if inv.player == self.playerId:
                 ourInv = inv
             else:
                 enemyInv = inv
@@ -151,7 +152,7 @@ class AIPlayer(Player):
 
         # The code below creates a utility value based on the amount of food our agent has in their inventory
         # Weight 0.4
-        utilities.append((float(ourInv.foodCount)/12.0, 0.7))
+        utilities.append((float(ourInv.foodCount)/12.0, 0.6))
 
         # If our agent has less than three ants this is a bad utility, if our agent has 3 to 5 ants this is a good
         # utility, and if our agent over 5 ants this is a medium utility
@@ -167,7 +168,7 @@ class AIPlayer(Player):
             antUtil = 1.0
         if numAnts > 5:
             antUtil = 0.5
-        utilities.append((antUtil, 0.0))
+        utilities.append((antUtil, 0.1))
 
         # The code below creates a utility value based on the number of ants the enemy has
         # If the enemy has more than 4 ants this is a bad utility and if the enemy has less it is a good utility
@@ -183,22 +184,29 @@ class AIPlayer(Player):
             enemyAntUtil = 0.2
         if enemyNumAnts > 4:
             enemyAntUtil = 0.0
-        utilities.append((enemyAntUtil, 0.0))
+        utilities.append((enemyAntUtil, 0.1))
 
         # Add utility for each food being carried by an ant worker
         # Weight 0.1
         carryUtil = 0.0
-        for worker in getAntList(currentState, self.playerId, (WORKER,)):
+        for worker in ourInv.ants:
             if worker.carrying:
-                carryUtil += 0.2
-        carryUtil = max(carryUtil, 1.0)
+                carryUtil += (float(approxDist(worker.coords, getConstrList(currentState, 
+                                    self.playerId, (TUNNEL,))[0].coords )) / 20.0)
+            else:
+                carryUtil += (float(approxDist(worker.coords, self.ourFood[0].coords )) / 20.0)
+        # carryUtil = max(carryUtil, 1.0)
         utilities.append((carryUtil, 0.3))
 
         # Add utility for Her Majesty's health
         # Weight 0.1
         myBeautifulQueen = getAntList(currentState, self.playerId, (QUEEN,))[0]
         queenUtil = float(myBeautifulQueen.health)/8.0
-        utilities.append((queenUtil, 0.0))
+        if (myBeautifulQueen.coords == getConstrList(currentState, self.playerId, (ANTHILL,))[0].coords) or \
+                (myBeautifulQueen.coords == self.ourFood[0].coords) or \
+                (myBeautifulQueen.coords == self.ourFood[1].coords):
+            queenUtil = 0
+        utilities.append((queenUtil, 0.1))
 
         # Add utilities together with respective weights
         finalUtil = 0.0
@@ -219,7 +227,7 @@ class AIPlayer(Player):
         if move is not None:
             nextState = getNextStateAdversarial(currentState, move)
         else:
-            nextState = None
+            nextState = currentState
 
         if isMaxNode:
             bound = 0
@@ -264,7 +272,7 @@ class AIPlayer(Player):
     ##
     def moveSearch(self, finalDepth, currDepth, currNode):
         if currDepth >= finalDepth or currDepth >= 5:
-            currNode['utility'] = self.getUtility(currNode['currState'])
+            currNode['utility'] = self.getUtility(currNode['nextState'])
             return currNode
 
         
@@ -272,11 +280,18 @@ class AIPlayer(Player):
         nodes = []
         for move in listAllLegalMoves(currNode['currState']):
             if move.moveType == END:
-                nodes.append(self.initNode(move, 0.5, currNode['currState'], not currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, self.getUtility(currNode['nextState']), currNode['nextState']
+                        , not currNode['isMax'], currNode))
             else:
-                nodes.append(self.initNode(move, 0.5, currNode['currState'], currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, self.getUtility(currNode['nextState']), currNode['nextState']
+                        , currNode['isMax'], currNode))
+
+        nodes = sorted(nodes, key=itemgetter('utility'))[0:10]
 
         for node in nodes:
+            # if nodes.index(node) <= len(nodes)/10:
+            #     node = self.moveSearch(finalDepth+1, currDepth+1, node)
+            # else:
             node = self.moveSearch(finalDepth, currDepth+1, node)
             if currDepth != 0:
                 if currNode['isMax'] and node['utility'] > currNode['bound']:
