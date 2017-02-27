@@ -10,6 +10,7 @@ from Move import Move
 from GameState import *
 from AIPlayerUtils import *
 from operator import itemgetter, attrgetter
+from random import shuffle
 
 
 ##
@@ -110,7 +111,7 @@ class AIPlayer(Player):
                     self.ourFood.append(food)
             self.weHaveNotDoneThisBefore = False
 
-        return (self.moveSearch(3, 0, self.initNode(None, -1, currentState, True, None))['move'])
+        return (self.moveSearch(3, 0, self.initNode(None, currentState, True, None))['move'])
 
     ##
     # getAttack
@@ -152,7 +153,7 @@ class AIPlayer(Player):
 
         # The code below creates a utility value based on the amount of food our agent has in their inventory
         # Weight 0.4
-        utilities.append((float(ourInv.foodCount)/12.0, 0.6))
+        utilities.append((float(ourInv.foodCount)/12.0, 0.4))
 
         # If our agent has less than three ants this is a bad utility, if our agent has 3 to 5 ants this is a good
         # utility, and if our agent over 5 ants this is a medium utility
@@ -168,11 +169,11 @@ class AIPlayer(Player):
             antUtil = 1.0
         if numAnts > 5:
             antUtil = 0.5
-        utilities.append((antUtil, 0.1))
+        utilities.append((antUtil, 0.2))
 
         # The code below creates a utility value based on the number of ants the enemy has
         # If the enemy has more than 4 ants this is a bad utility and if the enemy has less it is a good utility
-        # Weight 0.2
+        # Weight 0.1
         enemyNumAnts = len(enemyInv.ants)
         if enemyNumAnts == 1 or enemyNumAnts == 0:
             enemyAntUtil = 1.0
@@ -187,22 +188,38 @@ class AIPlayer(Player):
         utilities.append((enemyAntUtil, 0.1))
 
         # Add utility for each food being carried by an ant worker
-        # Weight 0.1
+        # Does not depend on number of worker ants
+        # Weight 0.2
         carryUtil = 0.0
-        for worker in ourInv.ants:
+        listOfWorkers = getAntList(currentState, self.playerId, (WORKER,))
+        for worker in listOfWorkers:
             if worker.carrying:
-                carryUtil += (float(approxDist(worker.coords, getConstrList(currentState, 
-                                    self.playerId, (TUNNEL,))[0].coords )) / 20.0)
+                tunnelAndHill = \
+                        [float(approxDist(worker.coords, getConstrList(currentState, self.playerId, (TUNNEL,))[0].coords )),
+                        float(approxDist(worker.coords, getConstrList(currentState, self.playerId, (ANTHILL,))[0].coords ))]
+                carryUtil += ( 0.9-(min(tunnelAndHill)) / 30.0)
             else:
-                carryUtil += (float(approxDist(worker.coords, self.ourFood[0].coords )) / 20.0)
-        # carryUtil = max(carryUtil, 1.0)
-        utilities.append((carryUtil, 0.3))
+                foodDistances = [float(approxDist(worker.coords, self.ourFood[0].coords )),
+                                float(approxDist(worker.coords, self.ourFood[1].coords ))]
+                carryUtil += ( 0.7-(min(foodDistances) / 30.0))
+        carryUtil /= len(listOfWorkers)
+        carryUtil = min(carryUtil, 1.0)
+        utilities.append((carryUtil, 0.2))
+
+        # Add utility for warriors
+        # Wieght
+        # warriorUtil = 0.0
+        # listOfWarriors = getAntList(currentState, self.playerId, (DRONE, SOLDIER, R_SOLDIER))
+        # for warrior in listOfWarriors
+
 
         # Add utility for Her Majesty's health
+        # Subtract utility if she's standing on food, the hill, or the tunnel
         # Weight 0.1
         myBeautifulQueen = getAntList(currentState, self.playerId, (QUEEN,))[0]
         queenUtil = float(myBeautifulQueen.health)/8.0
         if (myBeautifulQueen.coords == getConstrList(currentState, self.playerId, (ANTHILL,))[0].coords) or \
+                (myBeautifulQueen.coords == getConstrList(currentState, self.playerId, (TUNNEL,))[0].coords) or \
                 (myBeautifulQueen.coords == self.ourFood[0].coords) or \
                 (myBeautifulQueen.coords == self.ourFood[1].coords):
             queenUtil = 0
@@ -223,18 +240,18 @@ class AIPlayer(Player):
     #   move - the move to create the next node
     #   currentState - a clone of the current state
     ##
-    def initNode(self, move, utility, currentState, isMaxNode, parentNode):
-        if move is not None:
-            nextState = getNextStateAdversarial(currentState, move)
-        else:
+    def initNode(self, move, currentState, isMaxNode, parentNode):
+        if move is None:
             nextState = currentState
+        else:
+            nextState = getNextStateAdversarial(currentState, move)
 
         if isMaxNode:
             bound = 0
         else:
             bound = 1
 
-        node = {'move': move, 'currState': currentState,'nextState': nextState, 'utility': utility, 'isMax': isMaxNode,
+        node = {'move': move, 'currState': currentState,'nextState': nextState, 'utility': self.getUtility(nextState), 'isMax': isMaxNode,
                      'bound': bound, 'parentNode': parentNode}
         return node
 
@@ -278,15 +295,17 @@ class AIPlayer(Player):
         
         # get list of neighboring nodes
         nodes = []
-        for move in listAllLegalMoves(currNode['currState']):
+        for move in listAllLegalMoves(currNode['nextState']):
             if move.moveType == END:
-                nodes.append(self.initNode(move, self.getUtility(currNode['nextState']), currNode['nextState']
-                        , not currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, currNode['nextState'], not currNode['isMax'], currNode))
             else:
-                nodes.append(self.initNode(move, self.getUtility(currNode['nextState']), currNode['nextState']
-                        , currNode['isMax'], currNode))
+                nodes.append(self.initNode(move, currNode['nextState'], currNode['isMax'], currNode))
 
-        nodes = sorted(nodes, key=itemgetter('utility'))[0:10]
+# shuffle(nodes)
+        if currNode['isMax']:
+            nodes = sorted(nodes, key=itemgetter('utility'), reverse=True)[0:10]
+        else:
+            nodes = sorted(nodes, key=itemgetter('utility'), reverse=False)[0:10]
 
         for node in nodes:
             # if nodes.index(node) <= len(nodes)/10:
